@@ -29,7 +29,7 @@ from sklearn import model_selection
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
 from sklearn.metrics import mean_absolute_error
-print "Scikit-learn version: %s" % (sklearn.__version__)
+print "\nScikit-learn version: %s" % (sklearn.__version__)
 
 
 # read in arguments
@@ -60,6 +60,7 @@ param_names=['log_dt','log_abs_mdot','he_core_mass','c_core_mass','o_core_mass',
 
 # find the index of the parameter of interest
 param_idx = param_names.index(args.parameter)
+print 'Parameters for interpolation: %s' % args.parameter
 
 
 # read in inputs and outputs
@@ -80,7 +81,7 @@ resamp_len = outputs.shape[1]
 # store inputs as a dataframe
 inputs_df = pd.DataFrame({"Mbh_init": inputs[:,0], "M2_init": inputs[:,1], "P_init": inputs[:,2], "Z_init": inputs[:,3]})
 
-print 'This grid contains:'
+print '\nThis grid contains:'
 print 'Mbh_init: %f - %f' % (inputs_df["Mbh_init"].min(), inputs_df["Mbh_init"].max())
 print 'M2_init: %f - %f' % (inputs_df["M2_init"].min(), inputs_df["M2_init"].max())
 print 'P_init: %f - %f' % (inputs_df["P_init"].min(), inputs_df["P_init"].max())
