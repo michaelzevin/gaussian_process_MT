@@ -277,15 +277,15 @@ def PCA_to_vals(y):
 # do the GP inteprolation
 start_time = time.time()   # start the clock
 GP_pred, sigma = GPR_scikit(X_train, y_train, X_test)
-elapsed = time.time() - start_time   # See how long it took 
-print '      Done with GP interpolation for %s...it only took %f seconds!' % (args.parameter,elapsed)
+elapsed = time.time() - start_time   # See how long it took
+print '\nDone with GP interpolation for %s...it only took %f seconds!' % (args.parameter,elapsed)
 
 
 # do the linear inteprolation
 start_time = time.time()   # start the clock
 lin_pred = linear_interp(X_train, y_train, X_test)
 elapsed = time.time() - start_time   # See how long it took
-print '      Done with linear interpolation for %s...it only took %f seconds!' % (args.parameter,elapsed)
+print 'Done with linear interpolation for %s...it only took %f seconds!\n' % (args.parameter,elapsed)
 
 
 # reshape interpolations as (tracks,steps) for convenience
