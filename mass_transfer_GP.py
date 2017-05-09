@@ -34,7 +34,7 @@ print "Scikit-learn version: %s" % (sklearn.__version__)
 
 # read in arguments
 argp = argparse.ArgumentParser()
-argp.add_argument("-rp", "--resamp-path", type=str, default='/projects/b1011/mzevin/gaussian_process/data/fine_grid/resampled/', help="Path to resampled tracks directory. Default='/projects/b1011/mzevin/gaussian_process/data/fine_grid/resampled/'.")
+argp.add_argument("-rp", "--resamp-path", type=str, default='/data/fine_grid/resampled/', help="Path to resampled tracks directory. Default='/data/fine_grid/resampled/'.")
 argp.add_argument("-r", "--resamp", type=str, default='all_l2_10', help="Resampled tracks you wish to use for interpolation. Default='all_l2_10'.")
 argp.add_argument("-p", "--parameter", type=str, help="Parameter you wish to interpolate. Parameters of interest include: star_1_mass, star_2_mass, log_Teff, log_L, log_R, period_days, age, log_dt, log_abs_mdot, binary_separation, lg_mtransfer_rate, lg_mstar_dot_1, lg_mstar_dot_2, etc. Note: star_1 = companion, star_2 = black hole.")
 argp.add_argument("-t", "--test-set", type=float, default=0.2, help="Fraction of the total set that is held out for testing (i.e., the GP will be trained on the (1-t) datapoints). Default = 0.2.")
@@ -42,10 +42,12 @@ argp.add_argument("-rs", "--random-seed", type=int, help="Use this for reproduci
 argp.add_argument("-f", "--run-tag", help="Use this as the stem for all file output.")
 argp.add_argument("-S", "--save-pickle", action="store_true", help="Save the GP model as a pickle. Default is off.")
 argp.add_argument("-P", "--make-plots", action="store_true", help="Makes and saves plots. Default is off.")
+argp.add_argument("-P", "--make-plots", action="store_true", help="Makes and saves plots. Default is off.")
+argp.add_argument("-T", "--test_MT", type=int, default=0, help="Cuts the dataset to make a smaller grid centered around a testing track. Providing an integer gives the number nearest tracks you wish to keep in the training set. Default testing track is 10 Mbh, 15 M2, 2 P, 0.02 Z.")
 args = argp.parse_args()
 
 
-# argument handlingi
+# argument handling
 make_plots = args.make_plots
 save_pickle = args.save_pickle
 
