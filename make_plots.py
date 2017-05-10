@@ -20,13 +20,13 @@ from mpl_toolkits.mplot3d import Axes3D
 
 # read in arguments
 argp = argparse.ArgumentParser()
-argp.add_argument("-pd", "--pickle-directory", type=str, default='pickles/10_steps', help="Path to pickled output. Default='10_steps'.")
+argp.add_argument("-pd", "--pickle-directory", type=str, default='10_steps', help="Path to pickled output. Default='10_steps'.")
 argp.add_argument("-f", "--run-tag", help="Use this as the stem for all file output.")
 args = argp.parse_args()
 
 
 # path to the directory that has all the resampled files you wish to use
-pickle_path = args.pickle_directory + '/'
+pickle_path = 'pickles/' + args.pickle_directory + '/'
 
 
 # make subdirectory in "plots" for the plots
@@ -42,22 +42,33 @@ for p in os.listdir(pickle_path):
     params.append(p[:-7])
     pickles[p[:-7]] = pickle.load(open(pickle_path+p, "rb"))
 inputs = pickles[params[0]]['inputs'] # these will be the same for all output parameters since we specify random seed
+full_inputs = pickles[params[0]]['full_inputs']
 X_test = pickles[params[0]]['X_test']
 X_train = pickles[params[0]]['X_train']
 steps = pickles[params[0]]['y_train'].shape[1]
 
 
+# define function to unnormalize
+def unnormalize(norm_vec, min, max):
+    return (norm_vec * (max-min) + min)
+# do this for everything in X_test, X_train
+X_test[:,0] = unnormalize(X_test[:,0],full_inputs['Mbh_init'].min(),full_inputs['Mbh_init'].max())
+X_test[:,1] = unnormalize(X_test[:,1],full_inputs['M2_init'].min(),full_inputs['M2_init'].max())
+X_test[:,2] = unnormalize(X_test[:,2],full_inputs['P_init'].min(),full_inputs['P_init'].max())
+X_test[:,3] = 10**unnormalize(X_test[:,3],np.log10(full_inputs['Z_init']).min(),np.log10(full_inputs['Z_init']).max())
+X_train[:,0] = unnormalize(X_train[:,0],full_inputs['Mbh_init'].min(),full_inputs['Mbh_init'].max())
+X_train[:,1] = unnormalize(X_train[:,1],full_inputs['M2_init'].min(),full_inputs['M2_init'].max())
+X_train[:,2] = unnormalize(X_train[:,2],full_inputs['P_init'].min(),full_inputs['P_init'].max())
+X_train[:,3] = 10**unnormalize(X_train[:,3],np.log10(full_inputs['Z_init']).min(),np.log10(full_inputs['Z_init']).max())
+
+
 # pick random testing point for plotting purposes
 t = np.random.randint(0,len(X_test)) # choose random testing track to plot, or specify number
-Mbh_test = (X_test[t,0]*inputs['Mbh_init'].max())
-M2_test = (X_test[t,1]*inputs['M2_init'].max())
-P_test = (X_test[t,2]*inputs['P_init'].max())
-Z_test = (X_test[t,3]*inputs['Z_init'].max())
 print 'Testing point properties:'
-print '   Mbh_init : %f' % Mbh_test
-print '   M2_init : %f' % M2_test
-print '   P_init : %f' % P_test
-print '   Z_init : %f' % Z_test
+print '   Mbh_init : %f' % X_test[t,0]
+print '   M2_init : %f' % X_test[t,1]
+print '   P_init : %f' % X_test[t,2]
+print '   Z_init : %f' % X_test[t,3]
 
 
 ### Plot initial condition of entire dataset, and training vs testing set ###
@@ -67,9 +78,9 @@ ax.set_zlabel('$Black\ Hole\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=
 ax.set_ylabel('$Companion\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=12)
 ax.set_xlabel('$Log\ Period\ (s)$', rotation=0, labelpad=20, size=12)
 
-pts = ax.scatter(np.log10(X_train[:,2]*inputs["P_init"].max()), X_train[:,1]*inputs["M2_init"].max(), X_train[:,0]*inputs["Mbh_init"].max(), zdir='z', cmap='viridis', c=np.log10(X_train[:,3]*inputs["Z_init"].max()), vmin=np.log10(inputs["Z_init"]).min(), vmax=np.log10(inputs["Z_init"]).max(), marker='.', s=2, label='training tracks')
-ax.scatter(np.log10(X_test[:,2]*inputs["P_init"].max()), X_test[:,1]*inputs["M2_init"].max(), X_test[:,0]*inputs["Mbh_init"].max(), zdir='z', cmap='viridis', c=np.log10(X_test[:,3]*inputs["Z_init"].max()), vmin=np.log10(inputs["Z_init"]).min(), vmax=np.log10(inputs["Z_init"]).max(), marker='*', s=15, label='testing tracks')
-ax.scatter(np.log10(X_test[t,2]*inputs["P_init"].max()), X_test[t,1]*inputs["M2_init"].max(), X_test[t,0]*inputs["Mbh_init"].max(), zdir='z', cmap='viridis', c=np.log10(X_test[t,3]*inputs["Z_init"].max()), vmin=np.log10(inputs["Z_init"]).min(), vmax=np.log10(inputs["Z_init"]).max(), marker='*', s=200, label='plotted point')
+pts = ax.scatter(np.log10(X_train[:,2]), X_train[:,1], X_train[:,0], zdir='z', cmap='viridis', c=X_train[:,3], vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='.', s=10, label='training tracks')
+ax.scatter(np.log10(X_test[:,2]), X_test[:,1], X_test[:,0], zdir='z', cmap='viridis', c=X_test[:,3], vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='*', s=20, label='testing tracks')
+ax.scatter(np.log10(X_test[t,2]), X_test[t,1], X_test[t,0], zdir='z', cmap='viridis', c=X_test[t,3], vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='*', s=200, label='plotted point')
 fig.colorbar(pts)
 plt.legend()
 
@@ -89,7 +100,7 @@ for idx, p in enumerate(params):
         axs[idx].set_xlabel('Resampled Step')
     axs[idx].set_ylabel(p)
     if idx==0:
-        axs[idx].set_title('Interpolation for Testing Track Mbh: '+str(Mbh_test)+', M2: '+str(M2_test)+', P: '+str(P_test)+', Z: '+str(Z_test))
+        axs[idx].set_title('Interpolation for Testing Track Mbh: '+str(X_test[:,0])+', M2: '+str(X_test[:,1])+', P: '+str(X_test[:,2])+', Z: '+str(X_test[:,3]))
     axs[idx].set_xlim(0-steps/10, steps+steps/10) # add some buffer to the plot
 
     # do plotting
