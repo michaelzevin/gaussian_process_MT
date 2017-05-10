@@ -80,6 +80,7 @@ resamp_len = outputs.shape[1]
 
 # store inputs as a dataframe
 inputs_df = pd.DataFrame({"Mbh_init": inputs[:,0], "M2_init": inputs[:,1], "P_init": inputs[:,2], "Z_init": inputs[:,3]})
+full_inputs_df = inputs_df[:]   # store the full grid for renormalization purposes
 
 print '\nThis grid contains:'
 print 'Mbh_init: %f - %f' % (inputs_df["Mbh_init"].min(), inputs_df["Mbh_init"].max())
@@ -93,7 +94,8 @@ def normalize(vec, min, max):
     return ((vec-min) / (max-min))
 def unnormalize(norm_vec, min, max):
     return norm_vec * (max-min) / min
-inputs = pd.DataFrame({"Mbh_init": normalize(inputs_df['Mbh_init'],inputs_df['Mbh_init'].min(),inputs_df['Mbh_init'].max()),"M2_init": normalize(inputs_df['M2_init'],inputs_df['M2_init'].min(),inputs_df['M2_init'].max()),"P_init": normalize(inputs_df['P_init'],inputs_df['P_init'].min(),inputs_df['P_init'].max()),"Z_init": normalize(np.log10(inputs_df['Z_init']),np.log10(inputs_df['Z_init']).min(),np.log10(inputs_df['Z_init']).max())})
+#FIXME this can be done better...
+inputs = pd.DataFrame({"Mbh_init": normalize(inputs_df['Mbh_init'],full_inputs_df['Mbh_init'].min(),full_inputs_df['Mbh_init'].max()),"M2_init": normalize(inputs_df['M2_init'],full_inputs_df['M2_init'].min(),full_inputs_df['M2_init'].max()),"P_init": normalize(inputs_df['P_init'],full_inputs_df['P_init'].min(),full_inputs_df['P_init'].max()),"Z_init": normalize(np.log10(inputs_df['Z_init']),np.log10(full_inputs_df['Z_init']).min(),np.log10(full_inputs_df['Z_init']).max())})
 inputs = np.array(inputs)
 
 
@@ -110,30 +112,6 @@ X_train = np.array(list(np.append(x,y) for x in X_train_orig for y in step_space
 X_test = np.array(list(np.append(x,y) for x in X_test_orig for y in step_space))
 y_train = y_train_orig.flatten()
 y_test = y_test_orig.flatten()
-
-
-# plot the parameter space coverage
-if make_plots:
-    fig=plt.figure(figsize = (12,8), facecolor = 'white')
-    ax = fig.add_subplot(111, projection='3d')
-    ax.set_zlabel('$Black\ Hole\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=12)
-    ax.set_ylabel('$Companion\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=12)
-    ax.set_xlabel('$Log\ Period\ (s)$', rotation=0, labelpad=20, size=12)
-
-
-    log_P = np.log10(inputs_df['P_init'])
-    log_Z = np.log10(inputs_df['Z_init'])
-    norm_log_Z = (log_Z-log_Z.min())/(log_Z.max()-log_Z.min())
-
-    pts = ax.scatter(log_P, inputs_df['M2_init'], inputs_df['Mbh_init'], zdir='z', s=5, cmap='viridis', c=norm_log_Z, label='simulated tracks')
-    fig.colorbar(pts)
-    plt.tight_layout()
-    plt.legend()
-    fname = 'init_condit.png'
-    if args.run_tag:
-        fname = args.run_tag + '_' + fname
-    plt.savefig(fname)
-
 
 
 
@@ -154,13 +132,13 @@ if args.test_MT != 0:
     # store testMT inputs as a dataframe
     testMT_inputs_df = pd.DataFrame({"Mbh_init": testMT_inputs[:,0], "M2_init": testMT_inputs[:,1], "P_init": testMT_inputs[:,2], "Z_init": testMT_inputs[:,3]})
 
-    # normalize testMT inputs
-    testMT_inputs = pd.DataFrame({"Mbh_init": normalize(testMT_inputs_df['Mbh_init'],inputs_df['Mbh_init'].min(),inputs_df['Mbh_init'].max()),"M2_init": normalize(testMT_inputs_df['M2_init'],inputs_df['M2_init'].min(),inputs_df['M2_init'].max()),"P_init": normalize(testMT_inputs_df['P_init'],inputs_df['P_init'].min(),inputs_df['P_init'].max()),"Z_init": normalize(np.log10(testMT_inputs_df['Z_init']),np.log10(inputs_df['Z_init']).min(),np.log10(inputs_df['Z_init']).max())})
+    # normalize testMT inputs FIXME this can be done better
+    testMT_inputs = pd.DataFrame({"Mbh_init": normalize(testMT_inputs_df['Mbh_init'],full_inputs_df['Mbh_init'].min(),full_inputs_df['Mbh_init'].max()),"M2_init": normalize(testMT_inputs_df['M2_init'],full_inputs_df['M2_init'].min(),full_inputs_df['M2_init'].max()),"P_init": normalize(testMT_inputs_df['P_init'],full_inputs_df['P_init'].min(),full_inputs_df['P_init'].max()),"Z_init": normalize(np.log10(testMT_inputs_df['Z_init']),np.log10(full_inputs_df['Z_init']).min(),np.log10(full_inputs_df['Z_init']).max())})
     testMT_inputs = np.array(testMT_inputs)
 
     # choose args.test_MT tracks closest to the testing track as the training data
     norm_vecs=[]
-    for inp in inputs:
+    for inp in np.array(inputs):
         norm_vecs.append(np.linalg.norm(testMT_inputs-inp))
         sorted_idxs = np.argsort(norm_vecs)
 
@@ -186,6 +164,27 @@ if args.test_MT != 0:
     y_train = y_train_orig.flatten()
     y_test = y_test_orig.flatten()
 
+
+
+# plot the parameter space coverage
+if make_plots:
+    fig=plt.figure(figsize = (12,8), facecolor = 'white')
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_zlabel('$Black\ Hole\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=12)
+    ax.set_ylabel('$Companion\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=12)
+    ax.set_xlabel('$Log\ Period\ (s)$', rotation=0, labelpad=20, size=12)
+
+
+    log_P = np.log10(inputs_df['P_init'])
+
+    pts = ax.scatter(log_P, inputs_df['M2_init'], inputs_df['Mbh_init'], zdir='z', s=5, cmap='viridis', c=inputs_df['Z_init'], label='simulated tracks')
+    fig.colorbar(pts)
+    plt.tight_layout()
+    plt.legend()
+    fname = 'init_condit.png'
+    if args.run_tag:
+        fname = args.run_tag + '_' + fname
+    plt.savefig(fname)
 
 
 
@@ -297,7 +296,7 @@ lin_pred = np.reshape(lin_pred, (y_test_orig.shape[0],y_test_orig.shape[1]), ord
 
 # save pickle
 if save_pickle:
-    data = {"inputs": inputs_df, "X_test": X_test_orig, "y_test": y_test_orig, "X_train": X_train_orig, "y_train": y_train_orig, "GP": GP_pred, "error": sigma, "linear": lin_pred}
+    data = {"inputs": inputs_df, "full_inputs": full_inputs_df, "X_test": X_test_orig, "y_test": y_test_orig, "X_train": X_train_orig, "y_train": y_train_orig, "GP": GP_pred, "error": sigma, "linear": lin_pred}
     fname = args.parameter+'_pickle'
     if args.run_tag:
         fname = args.run_tag + '_' + fname
