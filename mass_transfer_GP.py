@@ -10,6 +10,7 @@ import pdb
 import multiprocessing
 import itertools
 import pickle
+import mkl
 
 import matplotlib
 matplotlib.use("agg")
@@ -123,7 +124,7 @@ y_test = y_test_orig.flatten()
 
 ### If test_MT is specified, read in this track and cut the inputs tracks as specified ###
 if args.test_MT != 0:
-    testMT_path = 'data/test_MT/resampled/' + args.resamp + '/'
+    testMT_path = args.resamp_path + 'test_MT/resampled/' + args.resamp + '/'
     testMT_inputs=[]
     testMT_outputs=[]
     for file in os.listdir(testMT_path):   # should only be 1 file in this directory, but can have more
