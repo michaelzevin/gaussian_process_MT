@@ -34,7 +34,7 @@ print "\nScikit-learn version: %s" % (sklearn.__version__)
 
 # read in arguments
 argp = argparse.ArgumentParser()
-argp.add_argument("-g", "--resamp-path", type=str, default='data/fine_grid/resampled/', help="Path to resampled tracks directory. Default='/data/fine_grid/resampled/'.")
+argp.add_argument("-rp", "--resamp-path", type=str, default='data/fine_grid/resampled/', help="Path to resampled tracks directory. Default='/data/fine_grid/resampled/'.")
 argp.add_argument("-r", "--resamp", type=str, default='all_l2_10', help="Resampled tracks you wish to use for interpolation. Default='all_l2_10'.")
 argp.add_argument("-p", "--parameter", type=str, help="Parameter you wish to interpolate. Parameters of interest include: star_1_mass, star_2_mass, log_Teff, log_L, log_R, period_days, age, log_dt, log_abs_mdot, binary_separation, lg_mtransfer_rate, lg_mstar_dot_1, lg_mstar_dot_2, etc. Note: star_1 = companion, star_2 = black hole.")
 argp.add_argument("-t", "--test-set", type=float, default=0.2, help="Fraction of the total set that is held out for testing (i.e., the GP will be trained on the (1-t) datapoints). Default = 0.2.")
@@ -60,7 +60,7 @@ param_names=['log_dt','log_abs_mdot','he_core_mass','c_core_mass','o_core_mass',
 
 # find the index of the parameter of interest
 param_idx = param_names.index(args.parameter)
-print 'Parameters for interpolation: %s' % args.parameter
+print 'Parameter(s) for interpolation: %s' % args.parameter
 
 
 # read in inputs and outputs
@@ -68,7 +68,7 @@ inputs=[]
 outputs=[]
 for file in os.listdir(resamp_path):
     x = np.load(resamp_path + file)
-    inputs.append((np.float(x['Mbh_init']),np.float(x['M2_init']),np.float(x['P_init']),np.float(x['Z_init'])))
+    inputs.append((np.float(x['M2_init']),np.float(x['Mbh_init']),np.float(x['P_init']),np.float(x['Z_init'])))
     outputs.append(x['x_resamp'][:,param_idx])
 
 
@@ -79,24 +79,30 @@ resamp_len = outputs.shape[1]
 
 
 # store inputs as a dataframe
-inputs_df = pd.DataFrame({"Mbh_init": inputs[:,0], "M2_init": inputs[:,1], "P_init": inputs[:,2], "Z_init": inputs[:,3]})
-full_inputs_df = inputs_df[:]   # store the full grid for renormalization purposes
+inputs_df = pd.DataFrame({"M2_init": inputs[:,0], "Mbh_init": inputs[:,1], "P_init": inputs[:,2], "Z_init": np.log10(inputs[:,3])})
+full_inputs_df = inputs_df.copy()   # store the full grid for renormalization purposes
+
 
 print '\nThis grid contains:'
-print 'Mbh_init: %f - %f' % (inputs_df["Mbh_init"].min(), inputs_df["Mbh_init"].max())
 print 'M2_init: %f - %f' % (inputs_df["M2_init"].min(), inputs_df["M2_init"].max())
+print 'Mbh_init: %f - %f' % (inputs_df["Mbh_init"].min(), inputs_df["Mbh_init"].max())
 print 'P_init: %f - %f' % (inputs_df["P_init"].min(), inputs_df["P_init"].max())
-print 'Z_init: %f - %f' % (inputs_df["Z_init"].min(), inputs_df["Z_init"].max())
+print 'Z_init: %f - %f' % (10**(inputs_df["Z_init"]).min(), 10**(inputs_df["Z_init"]).max())
 
 
 # define function to normalize inputs and normalize
-def normalize(vec, min, max):
-    return ((vec-min) / (max-min))
-def unnormalize(norm_vec, min, max):
-    return norm_vec * (max-min) / min
-#FIXME this can be done better...
-inputs = pd.DataFrame({"Mbh_init": normalize(inputs_df['Mbh_init'],full_inputs_df['Mbh_init'].min(),full_inputs_df['Mbh_init'].max()),"M2_init": normalize(inputs_df['M2_init'],full_inputs_df['M2_init'].min(),full_inputs_df['M2_init'].max()),"P_init": normalize(inputs_df['P_init'],full_inputs_df['P_init'].min(),full_inputs_df['P_init'].max()),"Z_init": normalize(np.log10(inputs_df['Z_init']),np.log10(full_inputs_df['Z_init']).min(),np.log10(full_inputs_df['Z_init']).max())})
-inputs = np.array(inputs)
+def normalize(df, norm_df):
+    normed = df.copy()
+    for key in df:
+        normed[key] = (df[key]-norm_df[key].min()) / (norm_df[key].max()-norm_df[key].min())
+    return normed
+def denormalize(df, norm_df):
+    denormed = df.copy()
+    for key in df:
+        denormed[key] = (df[key] * (norm_df[key].max()-norm_df[key].min()) + norm_df[key].min())
+    return denormed
+
+inputs = normalize(inputs_df, full_inputs_df)
 
 
 # split dataset into training and testing sets
@@ -108,8 +114,8 @@ else:
 
 # add an extra dimension of 'step' to the normalized inputs and flatten
 step_space = np.linspace(0,resamp_len,resamp_len)/resamp_len
-X_train = np.array(list(np.append(x,y) for x in X_train_orig for y in step_space))
-X_test = np.array(list(np.append(x,y) for x in X_test_orig for y in step_space))
+X_train = np.array(list(np.append(x,y) for x in np.array(X_train_orig) for y in step_space))
+X_test = np.array(list(np.append(x,y) for x in np.array(X_test_orig) for y in step_space))
 y_train = y_train_orig.flatten()
 y_test = y_test_orig.flatten()
 
@@ -122,7 +128,7 @@ if args.test_MT != 0:
     testMT_outputs=[]
     for file in os.listdir(testMT_path):   # should only be 1 file in this directory, but can have more
         x = np.load(testMT_path + file)
-        testMT_inputs.append((np.float(x['Mbh_init']),np.float(x['M2_init']),np.float(x['P_init']),0.02))   # for some reason no Z recorded...
+        testMT_inputs.append((np.float(x['M2_init']),np.float(x['Mbh_init']),np.float(x['P_init']),0.02))   # for some reason no Z recorded...
         testMT_outputs.append(x['x_resamp'][:,param_idx])
 
     # reshape as arrays
@@ -130,37 +136,37 @@ if args.test_MT != 0:
     testMT_outputs = np.asarray(testMT_outputs)
 
     # store testMT inputs as a dataframe
-    testMT_inputs_df = pd.DataFrame({"Mbh_init": testMT_inputs[:,0], "M2_init": testMT_inputs[:,1], "P_init": testMT_inputs[:,2], "Z_init": testMT_inputs[:,3]})
+    testMT_inputs_df = pd.DataFrame({"M2_init": testMT_inputs[:,0], "Mbh_init": testMT_inputs[:,1], "P_init": testMT_inputs[:,2], "Z_init": np.log10(testMT_inputs[:,3])})
 
-    # normalize testMT inputs FIXME this can be done better
-    testMT_inputs = pd.DataFrame({"Mbh_init": normalize(testMT_inputs_df['Mbh_init'],full_inputs_df['Mbh_init'].min(),full_inputs_df['Mbh_init'].max()),"M2_init": normalize(testMT_inputs_df['M2_init'],full_inputs_df['M2_init'].min(),full_inputs_df['M2_init'].max()),"P_init": normalize(testMT_inputs_df['P_init'],full_inputs_df['P_init'].min(),full_inputs_df['P_init'].max()),"Z_init": normalize(np.log10(testMT_inputs_df['Z_init']),np.log10(full_inputs_df['Z_init']).min(),np.log10(full_inputs_df['Z_init']).max())})
-    testMT_inputs = np.array(testMT_inputs)
+    # normalize testMT inputs
+    testMT_inputs = normalize(testMT_inputs_df, full_inputs_df)
 
     # choose args.test_MT tracks closest to the testing track as the training data
     norm_vecs=[]
     for inp in np.array(inputs):
-        norm_vecs.append(np.linalg.norm(testMT_inputs-inp))
+        norm_vecs.append(np.linalg.norm(np.array(testMT_inputs)-inp))
         sorted_idxs = np.argsort(norm_vecs)
 
     # only use the closest input and output points
-    inputs = inputs[sorted_idxs[0:args.test_MT]]
-    outputs = outputs[sorted_idxs[0:args.test_MT]]
-
-    # store inputs as a dataframe
     inputs_df = inputs_df.iloc[sorted_idxs[0:args.test_MT]]
+    outputs = outputs[sorted_idxs[0:args.test_MT]]
     print '\nThe cut grid contains:'
-    print 'Mbh_init: %f - %f' % (inputs_df["Mbh_init"].min(), inputs_df["Mbh_init"].max())
     print 'M2_init: %f - %f' % (inputs_df["M2_init"].min(), inputs_df["M2_init"].max())
+    print 'Mbh_init: %f - %f' % (inputs_df["Mbh_init"].min(), inputs_df["Mbh_init"].max())
     print 'P_init: %f - %f' % (inputs_df["P_init"].min(), inputs_df["P_init"].max())
-    print 'Z_init: %f - %f' % (inputs_df["Z_init"].min(), inputs_df["Z_init"].max())
+    print 'Z_init: %f - %f' % (10**inputs_df["Z_init"].min(), 10**inputs_df["Z_init"].max())
+
+    # re-normalize the cut array so that its values range from 0-1
+    testMT_inputs = normalize(testMT_inputs_df, inputs_df)
+    inputs = normalize(inputs_df, inputs_df)
 
     # split dataset into training and testing sets
     X_train_orig, X_test_orig, y_train_orig, y_test_orig = inputs, testMT_inputs, outputs, testMT_outputs
 
     # add an extra dimension of 'step' to the normalized inputs and flatten
     step_space = np.linspace(0,resamp_len,resamp_len)/resamp_len
-    X_train = np.array(list(np.append(x,y) for x in X_train_orig for y in step_space))
-    X_test = np.array(list(np.append(x,y) for x in X_test_orig for y in step_space))
+    X_train = np.array(list(np.append(x,y) for x in np.array(X_train_orig) for y in step_space))
+    X_test = np.array(list(np.append(x,y) for x in np.array(X_test_orig) for y in step_space))
     y_train = y_train_orig.flatten()
     y_test = y_test_orig.flatten()
 
@@ -174,10 +180,7 @@ if make_plots:
     ax.set_ylabel('$Companion\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=12)
     ax.set_xlabel('$Log\ Period\ (s)$', rotation=0, labelpad=20, size=12)
 
-
-    log_P = np.log10(inputs_df['P_init'])
-
-    pts = ax.scatter(log_P, inputs_df['M2_init'], inputs_df['Mbh_init'], zdir='z', s=5, cmap='viridis', c=inputs_df['Z_init'], label='simulated tracks')
+    pts = ax.scatter(np.log10(inputs_df['P_init']), inputs_df['M2_init'], inputs_df['Mbh_init'], zdir='z', s=5, cmap='viridis', c=inputs_df['Z_init'], label='simulated tracks')
     fig.colorbar(pts)
     plt.tight_layout()
     plt.legend()
@@ -292,6 +295,11 @@ print 'Done with linear interpolation for %s...it only took %f seconds!\n' % (ar
 GP_pred = np.reshape(GP_pred, (y_test_orig.shape[0],y_test_orig.shape[1]), order='C')
 sigma = np.reshape(sigma, (y_test_orig.shape[0],y_test_orig.shape[1]), order='C')
 lin_pred = np.reshape(lin_pred, (y_test_orig.shape[0],y_test_orig.shape[1]), order='C')
+
+
+# denormalize the input testing and training sets
+X_test_orig = denormalize(X_test_orig, inputs_df)
+X_train_orig = denormalize(X_train_orig, inputs_df)
 
 
 # save pickle

@@ -48,27 +48,13 @@ X_train = pickles[params[0]]['X_train']
 steps = pickles[params[0]]['y_train'].shape[1]
 
 
-# define function to unnormalize
-def unnormalize(norm_vec, min, max):
-    return (norm_vec * (max-min) + min)
-# do this for everything in X_test, X_train
-X_test[:,0] = unnormalize(X_test[:,0],full_inputs['Mbh_init'].min(),full_inputs['Mbh_init'].max())
-X_test[:,1] = unnormalize(X_test[:,1],full_inputs['M2_init'].min(),full_inputs['M2_init'].max())
-X_test[:,2] = unnormalize(X_test[:,2],full_inputs['P_init'].min(),full_inputs['P_init'].max())
-X_test[:,3] = 10**unnormalize(X_test[:,3],np.log10(full_inputs['Z_init']).min(),np.log10(full_inputs['Z_init']).max())
-X_train[:,0] = unnormalize(X_train[:,0],full_inputs['Mbh_init'].min(),full_inputs['Mbh_init'].max())
-X_train[:,1] = unnormalize(X_train[:,1],full_inputs['M2_init'].min(),full_inputs['M2_init'].max())
-X_train[:,2] = unnormalize(X_train[:,2],full_inputs['P_init'].min(),full_inputs['P_init'].max())
-X_train[:,3] = 10**unnormalize(X_train[:,3],np.log10(full_inputs['Z_init']).min(),np.log10(full_inputs['Z_init']).max())
-
-
-# pick random testing point for plotting purposes
+# pick random testing point for plotting purposes (for testMT, it is the only available track)
 t = np.random.randint(0,len(X_test)) # choose random testing track to plot, or specify number
 print 'Testing point properties:'
-print '   Mbh_init : %f' % X_test[t,0]
-print '   M2_init : %f' % X_test[t,1]
-print '   P_init : %f' % X_test[t,2]
-print '   Z_init : %f' % X_test[t,3]
+print '   Mbh_init : %f' % X_test.iloc[t]['Mbh_init']
+print '   M2_init : %f' % X_test.iloc[t]['M2_init']
+print '   P_init : %f' % X_test.iloc[t]['P_init']
+print '   Z_init : %f' % X_test.iloc[t]['Z_init']
 
 
 ### Plot initial condition of entire dataset, and training vs testing set ###
@@ -78,9 +64,9 @@ ax.set_zlabel('$Black\ Hole\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=
 ax.set_ylabel('$Companion\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=12)
 ax.set_xlabel('$Log\ Period\ (s)$', rotation=0, labelpad=20, size=12)
 
-pts = ax.scatter(np.log10(X_train[:,2]), X_train[:,1], X_train[:,0], zdir='z', cmap='viridis', c=X_train[:,3], vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='.', s=10, label='training tracks')
-ax.scatter(np.log10(X_test[:,2]), X_test[:,1], X_test[:,0], zdir='z', cmap='viridis', c=X_test[:,3], vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='*', s=20, label='testing tracks')
-ax.scatter(np.log10(X_test[t,2]), X_test[t,1], X_test[t,0], zdir='z', cmap='viridis', c=X_test[t,3], vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='*', s=200, label='plotted point')
+pts = ax.scatter(np.log10(np.array(X_train['P_init'])), np.array(X_train['M2_init']), np.array(X_train['Mbh_init']), zdir='z', cmap='viridis', c=np.array(X_train['Z_init']), vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='.', s=10, label='training tracks')
+ax.scatter(np.log10(np.array(X_test['P_init'])), np.array(X_test['M2_init']), np.array(X_test['Mbh_init']), zdir='z', cmap='viridis', c=np.array(X_test['Z_init']), vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='*', s=20, label='testing tracks')
+ax.scatter(np.log10(X_test['P_init'].iloc[t]), X_test['M2_init'].iloc[t], X_test['Mbh_init'].iloc[t], zdir='z', cmap='viridis', c=X_test['Z_init'].iloc[t], vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='*', s=200, label='plotted point')
 fig.colorbar(pts)
 plt.legend()
 
@@ -100,8 +86,8 @@ for idx, p in enumerate(params):
         axs[idx].set_xlabel('Resampled Step')
     axs[idx].set_ylabel(p)
     if idx==0:
-        axs[idx].set_title('Interpolation for Testing Track Mbh: '+str(X_test[:,0])+', M2: '+str(X_test[:,1])+', P: '+str(X_test[:,2])+', Z: '+str(X_test[:,3]))
-    axs[idx].set_xlim(0-steps/10, steps+steps/10) # add some buffer to the plot
+        axs[idx].set_title('Interpolation for Testing Track M2: '+str(X_test['M2_init'].iloc[t])+', Mbh: '+str(X_test['Mbh_init'].iloc[t])+', P: '+str(X_test['P_init'].iloc[t])+', Z: '+str(X_test['Z_init'].iloc[t]))
+    axs[idx].set_xlim(0-steps/10, steps+steps/10)   # add some buffer to the plot
 
     # do plotting
     param = pickles[p]
