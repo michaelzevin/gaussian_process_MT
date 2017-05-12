@@ -35,7 +35,7 @@ print "\nScikit-learn version: %s" % (sklearn.__version__)
 
 # read in arguments
 argp = argparse.ArgumentParser()
-argp.add_argument("-rp", "--resamp-path", type=str, default='data/fine_grid/resampled/', help="Path to resampled tracks directory. Default='/data/fine_grid/resampled/'.")
+argp.add_argument("-g", "--grid-path", type=str, default='fine_grid', help="Grid you wish to use. Default='fine_grid'.")
 argp.add_argument("-r", "--resamp", type=str, default='all_l2_10', help="Resampled tracks you wish to use for interpolation. Default='all_l2_10'.")
 argp.add_argument("-p", "--parameter", type=str, help="Parameter you wish to interpolate. Parameters of interest include: star_1_mass, star_2_mass, log_Teff, log_L, log_R, period_days, age, log_dt, log_abs_mdot, binary_separation, lg_mtransfer_rate, lg_mstar_dot_1, lg_mstar_dot_2, etc. Note: star_1 = companion, star_2 = black hole.")
 argp.add_argument("-t", "--test-set", type=float, default=0.2, help="Fraction of the total set that is held out for testing (i.e., the GP will be trained on the (1-t) datapoints). Default = 0.2.")
@@ -53,7 +53,8 @@ save_pickle = args.save_pickle
 
 
 # path to the directory that has all the resampled files you wish to use
-resamp_path = args.resamp_path + args.resamp + '/'
+basepath = os.path.dirname(os.path.realpath(__file__))
+path = basepath + '/data/' + args.grid_path + '/resampled/' + args.resamp + '/'
 
 
 # dict of parameter names
@@ -67,8 +68,8 @@ print 'Parameter(s) for interpolation: %s' % args.parameter
 # read in inputs and outputs
 inputs=[]
 outputs=[]
-for file in os.listdir(resamp_path):
-    x = np.load(resamp_path + file)
+for file in os.listdir(path):
+    x = np.load(path + file)
     inputs.append((np.float(x['M2_init']),np.float(x['Mbh_init']),np.float(x['P_init']),np.float(x['Z_init'])))
     outputs.append(x['x_resamp'][:,param_idx])
 
@@ -124,7 +125,7 @@ y_test = y_test_orig.flatten()
 
 ### If test_MT is specified, read in this track and cut the inputs tracks as specified ###
 if args.test_MT != 0:
-    testMT_path = args.resamp_path + 'test_MT/resampled/' + args.resamp + '/'
+    testMT_path = basepath + '/data/test_MT/resampled/' + args.resamp + '/'
     testMT_inputs=[]
     testMT_outputs=[]
     for file in os.listdir(testMT_path):   # should only be 1 file in this directory, but can have more
