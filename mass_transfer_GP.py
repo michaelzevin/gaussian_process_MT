@@ -310,5 +310,7 @@ if save_pickle:
     fname = args.parameter+'_pickle'
     if args.run_tag:
         fname = args.run_tag + '_' + fname
-    pickle.dump(data, open(fname, "wb"))
+    if not os.path.exists("pickles/"):
+        os.makedirs("pickles/")
+    pickle.dump(data, open("pickles/" + fname, "wb"))
 

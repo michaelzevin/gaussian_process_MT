@@ -20,19 +20,25 @@ from mpl_toolkits.mplot3d import Axes3D
 
 # read in arguments
 argp = argparse.ArgumentParser()
-argp.add_argument("-pd", "--pickle-directory", type=str, default='10_steps', help="Path to pickled output. Default='10_steps'.")
+argp.add_argument("-pd", "--pickle-directory", type=str, default='10_steps', help="Name of the pickle directory. Default='10_steps'.")
 argp.add_argument("-f", "--run-tag", help="Use this as the stem for all file output.")
 args = argp.parse_args()
 
 
 # path to the directory that has all the resampled files you wish to use
-pickle_path = 'pickles/' + args.pickle_directory + '/'
+basepath = os.getcwd()
+pickle_path = basepath + '/pickles/' + args.pickle_directory + '/'
 
 
 # make subdirectory in "plots" for the plots
-if not os.path.exists("plots/" + args.run_tag):
-    os.makedirs("plots/" + args.run_tag)
-pltdir = 'plots/'+args.run_tag+'/'
+if args.run_tag:
+    if not os.path.exists("plots/" + args.run_tag):
+        os.makedirs("plots/" + args.run_tag)
+    pltdir = 'plots/'+args.run_tag+'/'
+else:
+    if not os.path.exists("plots/"):
+        os.makedirs("plots/")
+    pltdir = 'plots/'
 
 
 # read in the pickles
@@ -71,9 +77,7 @@ fig.colorbar(pts)
 plt.legend()
 
 plt.tight_layout()
-fname = 'param_space.png'
-if args.run_tag:
-    fname = pltdir + fname
+fname = pltdir + 'param_space.png'
 plt.savefig(fname)
 
 
@@ -96,9 +100,7 @@ for idx, p in enumerate(params):
     axs[idx].plot(np.linspace(0,steps,steps), param['GP'][t,:], 'b.', linewidth=3, alpha=0.5, label='GP interpolated evolution')
     axs[idx].fill_between(np.linspace(0,steps,steps), param['GP'][t,:]-param['error'][t,:], param['GP'][t,:]+param['error'][t,:], alpha=0.05, label='GP error')
 plt.legend()
-fname = 'test_evolution.png'
-if args.run_tag:
-    fname = pltdir + fname
+fname = pltdir + 'test_evolution.png'
 plt.tight_layout()
 plt.savefig(fname)
 
@@ -132,9 +134,7 @@ for idx, p in enumerate(params):
     if idx==0:
         plt.legend(loc='upper right')
 
-fname = 'global_err.png'
-if args.run_tag:
-    fname = pltdir + fname
+fname = pltdir + 'global_err.png'
 plt.tight_layout()
 plt.savefig(fname)
 
@@ -158,8 +158,6 @@ for idx, p in enumerate(params):
     actual_error = abs_err(param['GP'],param['y_test'])
     axs[idx].scatter(param['error'].flatten(), actual_error.flatten(), c='k', marker='.')
 
-fname = 'error_comp.png'
-if args.run_tag:
-    fname = pltdir + fname
+fname = pltdir + 'error_comp.png'
 plt.tight_layout()
 plt.savefig(fname)
