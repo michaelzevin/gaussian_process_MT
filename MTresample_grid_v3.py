@@ -10,7 +10,7 @@ import os
 # The list_x can have any number of column names found in the npy files.
 list_x = ['star_1_mass' , 'log_Teff', 'log_L', 'log_R', 'period_days', 'lg_mstar_dot_1', 'age']
 norm = 2.       # FLOAT: choose between L^1, L^2, ... L^N normalization
-Nresample = 100
+Nresample = 20
 #------------------------
 
 list_x.sort() # put in alphabetical order to prevent multiple of the same resamplings being saved
@@ -18,11 +18,11 @@ list_x.sort() # put in alphabetical order to prevent multiple of the same resamp
 dir_path = 'all' + '_l' + str(norm)[0] + '_' + str(Nresample) + '/'
 
 # Path to data
-path_in = '/projects/b1011/mzevin/gaussian_process/data/test_MT/npy/'
+path_in = '/projects/b1011/mzevin/gaussian_process_MT/data/test_MT/npy/'
 # Path to log file
-path_log = '/projects/b1011/mzevin/gaussian_process/data/log/'
+path_log = '/projects/b1011/mzevin/gaussian_process_MT/data/log/'
 # Path to write out new data
-sys_path = '/projects/b1011/mzevin/gaussian_process/data/test_MT/resampled/'
+sys_path = '/projects/b1011/mzevin/gaussian_process_MT/data/test_MT/resampled/'
 
 # Check to see if the resampling already exists in path_out
 path_out = sys_path + dir_path

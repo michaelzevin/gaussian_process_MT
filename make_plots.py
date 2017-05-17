@@ -125,6 +125,7 @@ plt.xticks(range(len(params)), params)
 for idx, p in enumerate(params):
     print idx, p
     param = pickles[p]
+    # FIXME it would be good to return these values below for comparison...
     GP_err, GP_std = mean_exp_error(param['GP'],param['y_test'])
     lin_err, lin_std = mean_exp_error(param['linear'],param['y_test'])
     axs.scatter(idx-0.2, GP_err, c='b', marker='*')
@@ -140,6 +141,7 @@ plt.savefig(fname)
 
 
 ### See how GP-predicted error corellates to actual error ###
+# FIXME this isn't working...
 
 def abs_err(exp,act):
     err = np.abs(exp-act)
