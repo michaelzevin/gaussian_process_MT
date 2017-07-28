@@ -38,19 +38,20 @@ argp = argparse.ArgumentParser()
 argp.add_argument("-g", "--grid-path", type=str, default='fine_grid', help="Grid you wish to use. Default='fine_grid'.")
 argp.add_argument("-r", "--resamp", type=str, default='all_l2_10', help="Resampled tracks you wish to use for interpolation. Default='all_l2_10'.")
 argp.add_argument("-p", "--parameter", type=str, help="Parameter you wish to interpolate. Parameters of interest include: star_1_mass, star_2_mass, log_Teff, log_L, log_R, period_days, age, log_dt, log_abs_mdot, binary_separation, lg_mtransfer_rate, lg_mstar_dot_1, lg_mstar_dot_2, etc. Note: star_1 = companion, star_2 = black hole.")
-argp.add_argument("-t", "--test-set", type=float, default=0.2, help="Fraction of the total set that is held out for testing (i.e., the GP will be trained on the (1-t) datapoints). Default = 0.2.")
+argp.add_argument("-t", "--test-set", type=float, default=0.2, help="Fraction of the total (or cut set if cut-set is specified) set that is held out for testing (i.e., the GP will be trained on the (1-t) datapoints). Default = 0.2.")
+argp.add_argument("-c", "--cut-set", type=float, default=0.5, help="Randomly reduces the number of tracks so the input matrix isn't too crazy big. Default = 0.5.")
 argp.add_argument("-rs", "--random-seed", type=int, help="Use this for reproducible output.")
 argp.add_argument("-f", "--run-tag", help="Use this as the stem for all file output.")
+argp.add_argument("-PC", "--principal_component", type=int, default=None, help="Use this option to specify that you would like to interpolate the prinripal components rather than the steps, and specifed the number of PCs you would like to retain. Default=None")
 argp.add_argument("-S", "--save-pickle", action="store_true", help="Save the GP model as a pickle. Default is off.")
 argp.add_argument("-P", "--make-plots", action="store_true", help="Makes and saves plots. Default is off.")
 argp.add_argument("-T", "--test_MT", type=int, default=0, help="Cuts the dataset to make a smaller grid centered around a testing track. Providing an integer gives the number nearest tracks you wish to keep in the training set. Default testing track using this option is 10 Mbh, 15 M2, 2 P, 0.02 Z. Default path for test_MT resamplings is 'data/test_MT/resampled/<resamp>/")
 args = argp.parse_args()
 
 
-# argument handling
-make_plots = args.make_plots
-save_pickle = args.save_pickle
-
+# if we are using PCs, use a 1000-step resampling
+if args.principal_component:
+    args.resamp = 'all_l2_1000'
 
 # path to the directory that has all the resampled files you wish to use
 basepath = os.path.dirname(os.path.realpath(__file__))
@@ -78,7 +79,15 @@ for file in os.listdir(path):
 inputs = np.reshape(inputs,[len(inputs),4]) # 4 inputs
 outputs = np.asarray(outputs)
 resamp_len = outputs.shape[1]
+print '\n The full grid contains %i tracks' % len(inputs)
 
+# if cut_set is specified, we randomly reduce the set to args.cut_set of the total
+if args.cut_set:
+    reduced = np.where(np.random.random(size=len(inputs)) < args.cut_set)
+    inputs = inputs[reduced]
+    outputs = outputs[reduced]
+    print '\n The cut grid contains %i tracks' % len(inputs)
+    
 
 # store inputs as a dataframe
 inputs_df = pd.DataFrame({"M2_init": inputs[:,0], "Mbh_init": inputs[:,1], "P_init": inputs[:,2], "Z_init": np.log10(inputs[:,3])})
@@ -175,7 +184,7 @@ if args.test_MT != 0:
 
 
 # plot the parameter space coverage
-if make_plots:
+if args.make_plots:
     fig=plt.figure(figsize = (12,8), facecolor = 'white')
     ax = fig.add_subplot(111, projection='3d')
     ax.set_zlabel('$Black\ Hole\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=12)
@@ -196,6 +205,7 @@ if make_plots:
 ### Define GP and auxiliary functions ###
 
 def GPR_scikit(X_train, y_train, X_test):
+    #FIXME something has to be jacked up with this function...returns same values for every step...
     X = np.atleast_2d(X_train)
     y = np.atleast_2d(y_train).T
     X_pred = np.atleast_2d(X_test)
@@ -204,16 +214,17 @@ def GPR_scikit(X_train, y_train, X_test):
     c_min = np.abs(y_train).min()
     c_max = np.abs(y_train).max()
 
-    kernel = C(1e0,(1e-3,1e3))*RBF(length_scale=1e0, length_scale_bounds=(1e-6,1e6))
+    kernel = C(1e0,(1e-3,1e3))*RBF(length_scale=[1e0,1e0,1e0,1e0,1e0],length_scale_bounds=[(1e-2,1e2),(1e-2,1e2),(1e-2,1e2),(1e-2,1e2),(1e-2,1e2)])
 
     yerr = 1e-6
     gp = GPR(kernel=kernel, n_restarts_optimizer=9, normalize_y = True)
     gp.fit(X, y)
+    params = gp.kernel_.get_params()
 
     y_pred, sigma = gp.predict(X_pred, return_std=True)
     y_pred = np.reshape(y_pred,len(y_pred))
 
-    return y_pred, sigma
+    return y_pred, sigma, params
 
 def linear_interp(X_train, y_train, X_test):
     value = sp.interpolate.griddata(X_train, y_train, X_test, method='linear', fill_value=0.0)
@@ -255,6 +266,7 @@ def linear_interp_multi(data):
     return value
 
 
+# functions for principal component analysis
 def center(y):
     means=[]
     y_cen = np.empty(np.shape(y))
@@ -263,25 +275,31 @@ def center(y):
         y_cen[:,i] = y[:,i]-y[:,i].mean()
     return y_cen, means
 
-
 def uncenter(y_cen, means):
     for i in xrange(len(y_cen.T)):
         y[:,i] = y_cen[:,i]+means[i]
     return y
 
-
-# define PCA
-num_comps=10 # adjust number of components
-pca = PCA(n_components=num_comps)
-
 def PCA_to_vals(y):
     return pca.inverse_transform(y)
+
+
+# convert y data using PCs
+if args.principal_component:
+    pca = PCA(n_components=args.principal_component)
+    pca.fit(y_train_orig)
+    y_train = pca.transform(y_train_orig)
+    y_train = y_train.flatten()
+    reduce = len(X_train)/len(y_train)
+    X_train = X_train[::reduce]
+    X_test = X_test[::reduce]
+    # FIXME I don't think this is going to map inputs to outputs correctly...
 
 
 
 # do the GP inteprolation
 start_time = time.time()   # start the clock
-GP_pred, sigma = GPR_scikit(X_train, y_train, X_test)
+GP_pred, sigma, params = GPR_scikit(X_train, y_train, X_test)
 elapsed = time.time() - start_time   # See how long it took
 print '\nDone with GP interpolation for %s...it only took %f seconds!' % (args.parameter,elapsed)
 
@@ -291,6 +309,16 @@ start_time = time.time()   # start the clock
 lin_pred = linear_interp(X_train, y_train, X_test)
 elapsed = time.time() - start_time   # See how long it took
 print 'Done with linear interpolation for %s...it only took %f seconds!\n' % (args.parameter,elapsed)
+
+
+# if PC was specified, return data to original basis
+if args.principal_component:
+    GP_pred_PC = GP_pred[:]
+    sigma_PC = sigma[:]
+    lin_pred_PC = lin_pred[:]
+    GP_pred = PCA_to_vals(GP_pred)
+    sigma = PCA_to_vals(sigma)
+    lin_pred = PCA_to_vals(lin_pred)
 
 
 # reshape interpolations as (tracks,steps) for convenience
@@ -305,8 +333,12 @@ X_train_orig = denormalize(X_train_orig, inputs_df)
 
 
 # save pickle
-if save_pickle:
-    data = {"inputs": inputs_df, "full_inputs": full_inputs_df, "X_test": X_test_orig, "y_test": y_test_orig, "X_train": X_train_orig, "y_train": y_train_orig, "GP": GP_pred, "error": sigma, "linear": lin_pred}
+if args.save_pickle:
+    data = {"inputs": inputs_df, "full_inputs": full_inputs_df, "X_test": X_test_orig, "y_test": y_test_orig, "X_train": X_train_orig, "y_train": y_train_orig, "GP": GP_pred, "error": sigma, "linear": lin_pred, "params": params}
+    if args.principal_component:
+        data["GP_PC"] = GP_pred_PC
+        data["error_PC"] = sigma_PC
+        data["lin_PC"] = lin_pred_PC
     fname = args.parameter+'_pickle'
     if args.run_tag:
         fname = args.run_tag + '_' + fname
