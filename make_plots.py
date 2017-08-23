@@ -22,8 +22,12 @@ from mpl_toolkits.mplot3d import Axes3D
 argp = argparse.ArgumentParser()
 argp.add_argument("-pd", "--pickle-directory", type=str, default='10_steps', help="Name of the pickle directory. Default='10_steps'.")
 argp.add_argument("-f", "--run-tag", help="Use this as the stem for all file output.")
+argp.add_argument("-d", "--out-dir", type=str, default=None, help="The output directory (underneath 'plots/') for the figures. Default will be the same as the pickle directory.")
 args = argp.parse_args()
 
+# set output directory under 'plots/' to the pickle directory if not specified
+if not args.out_dir:
+    args.out_dir = args.pickle_directory
 
 # path to the directory that has all the resampled files you wish to use
 basepath = os.getcwd()
@@ -31,10 +35,10 @@ pickle_path = basepath + '/pickles/' + args.pickle_directory + '/'
 
 
 # make subdirectory in "plots" for the plots
-if args.run_tag:
-    if not os.path.exists("plots/" + args.run_tag):
-        os.makedirs("plots/" + args.run_tag)
-    pltdir = 'plots/'+args.run_tag+'/'
+if args.out_dir:
+    if not os.path.exists("plots/" + args.out_dir):
+        os.makedirs("plots/" + args.out_dir)
+    pltdir = 'plots/'+args.out_dir+'/'
 else:
     if not os.path.exists("plots/"):
         os.makedirs("plots/")
@@ -59,8 +63,8 @@ t = np.random.randint(0,len(X_test)) # choose random testing track to plot, or s
 print 'Testing point properties:'
 print '   Mbh_init : %f' % X_test.iloc[t]['Mbh_init']
 print '   M2_init : %f' % X_test.iloc[t]['M2_init']
-print '   P_init : %f' % X_test.iloc[t]['P_init']
-print '   Z_init : %f' % X_test.iloc[t]['Z_init']
+print '   P_init : %f' % 10**X_test.iloc[t]['P_init']
+print '   Z_init : %f' % 10**X_test.iloc[t]['Z_init']
 
 
 ### Plot initial condition of entire dataset, and training vs testing set ###
@@ -70,14 +74,17 @@ ax.set_zlabel('$Black\ Hole\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=
 ax.set_ylabel('$Companion\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=12)
 ax.set_xlabel('$Log\ Period\ (s)$', rotation=0, labelpad=20, size=12)
 
-pts = ax.scatter(np.log10(np.array(X_train['P_init'])), np.array(X_train['M2_init']), np.array(X_train['Mbh_init']), zdir='z', cmap='viridis', c=np.array(X_train['Z_init']), vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='.', s=10, label='training tracks')
-ax.scatter(np.log10(np.array(X_test['P_init'])), np.array(X_test['M2_init']), np.array(X_test['Mbh_init']), zdir='z', cmap='viridis', c=np.array(X_test['Z_init']), vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='*', s=20, label='testing tracks')
-ax.scatter(np.log10(X_test['P_init'].iloc[t]), X_test['M2_init'].iloc[t], X_test['Mbh_init'].iloc[t], zdir='z', cmap='viridis', c=X_test['Z_init'].iloc[t], vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='*', s=200, label='plotted point')
+pts = ax.scatter(np.array(X_train['P_init']), np.array(X_train['M2_init']), np.array(X_train['Mbh_init']), zdir='z', cmap='viridis', c=np.array(X_train['Z_init']), vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='.', s=10, label='training tracks')
+ax.scatter(np.array(X_test['P_init']), np.array(X_test['M2_init']), np.array(X_test['Mbh_init']), zdir='z', cmap='viridis', c=np.array(X_test['Z_init']), vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='*', s=20, label='testing tracks')
+ax.scatter(X_test['P_init'].iloc[t], X_test['M2_init'].iloc[t], X_test['Mbh_init'].iloc[t], zdir='z', cmap='viridis', c=X_test['Z_init'].iloc[t], vmin=inputs["Z_init"].min(), vmax=inputs["Z_init"].max(), marker='*', s=200, label='plotted point')
 fig.colorbar(pts)
 plt.legend()
 
 plt.tight_layout()
-fname = pltdir + 'param_space.png'
+if args.run_tag:
+    fname = pltdir + args.run_tag + '_param_space.png'
+else:
+    fname = pltdir + 'param_space.png'
 plt.savefig(fname)
 
 
@@ -100,7 +107,10 @@ for idx, p in enumerate(params):
     axs[idx].plot(np.linspace(0,steps,steps), param['GP'][t,:], 'b', linewidth=0.5, alpha=0.5, label='GP interpolated evolution')
     #axs[idx].fill_between(np.linspace(0,steps,steps), param['GP'][t,:]-param['error'][t,:], param['GP'][t,:]+param['error'][t,:], alpha=0.05, label='GP error')
 plt.legend()
-fname = pltdir + 'test_evolution.png'
+if args.run_tag:
+    fname = pltdir + args.run_tag + '_test_evolution.png'
+else:
+    fname = pltdir + 'test_evolution.png'
 plt.tight_layout()
 plt.savefig(fname)
 
@@ -135,7 +145,10 @@ for idx, p in enumerate(params):
     if idx==0:
         plt.legend(loc='upper right')
 
-fname = pltdir + 'global_err.png'
+if args.run_tag:
+    fname = pltdir + args.run_tag + '_global_err.png'
+else:
+    fname = pltdir + 'global_err.png'
 plt.tight_layout()
 plt.savefig(fname)
 
@@ -160,6 +173,9 @@ for idx, p in enumerate(params):
     actual_error = abs_err(param['GP'],param['y_test'])
     axs[idx].scatter(param['error'].flatten(), actual_error.flatten(), c='k', marker='.')
 
-fname = pltdir + 'error_comp.png'
+if args.run_tag:
+    fname = pltdir + args.run_tag + '_error_comp.png'
+else:
+    fname = pltdir + 'error_comp.png'
 plt.tight_layout()
 plt.savefig(fname)

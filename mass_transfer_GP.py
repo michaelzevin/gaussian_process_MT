@@ -1,3 +1,5 @@
+### INITIALIZATION SECTION ###
+
 # import packages
 import numpy as np
 import scipy as sp
@@ -39,16 +41,18 @@ argp.add_argument("-g", "--grid-path", type=str, default='fine_grid', help="Grid
 argp.add_argument("-r", "--resamp", type=str, default='all_l2_10', help="Resampled tracks you wish to use for interpolation. Default='all_l2_10'.")
 argp.add_argument("-p", "--parameter", type=str, help="Parameter you wish to interpolate. Parameters of interest include: star_1_mass, star_2_mass, log_Teff, log_L, log_R, period_days, age, log_dt, log_abs_mdot, binary_separation, lg_mtransfer_rate, lg_mstar_dot_1, lg_mstar_dot_2, etc. Note: star_1 = companion, star_2 = black hole.")
 argp.add_argument("-t", "--test-set", type=float, default=0.2, help="Fraction of the total (or cut set if cut-set is specified) set that is held out for testing (i.e., the GP will be trained on the N*(1-t) datapoints). Default = 0.2.")
-argp.add_argument("-c", "--cut-set", type=float, default=0.5, help="Randomly reduces the number of tracks by N*(c) so the input matrix isn't too crazy big. Default = 0.5.")
+argp.add_argument("-c", "--cut-set", type=float, default=None, help="Randomly reduces the number of tracks by N*(c) so the input matrix isn't too crazy big. Default=None.")
 argp.add_argument("-rs", "--random-seed", type=int, help="Use this for reproducible output.")
+argp.add_argument("-nc", "--num-cores", type=int, default=None, help="Specify number of cores to use. If not specifed, will parallelize over all available cores.")
 argp.add_argument("-f", "--run-tag", help="Use this as the stem for all file output.")
-argp.add_argument("-PC", "--principal_component", type=int, default=None, help="Use this option to specify that you would like to interpolate the prinripal components rather than the steps, and specifed the number of PCs you would like to retain. Default=None.")
-argp.add_argument("-S", "--save-pickle", action="store_true", help="Save the GP model as a pickle. Default is off.")
-argp.add_argument("-PL", "--make-plots", action="store_true", help="Makes and saves plots during this script. Default is off.")
-argp.add_argument("-E", "--expand-matrix", action="store_true", help="Use this option to expand the input/output matrices, so that steps/principal components retain some correlation information. This will expand the matrices by the length of the resampling, or by the number specified in PC if args.principal_component is defined. Note that this will increase training time by ~x^3 and may cause memory issues. Default=None.")
-argp.add_argument("-T", "--test-MT", type=int, default=None, help="Cuts the dataset to make a smaller grid centered around a testing track. Providing an integer gives the number nearest tracks you wish to keep in the training set. Default='None'. Default testing track using this option is 10 Mbh, 15 M2, 2 P, 0.02 Z. Default path for test_MT resamplings is 'data/test_MT/resampled/<resamp>/".)
-argp.add_argument("-PR", "--prior", type=str, default=None, help="This will call a different Gaussian Process Regressor that imposes a prior on the hyperparameters, used when there is intuition for what the scale length/amplitude in the kernel should approximately be. One can add additional priors in the GaussianProcessRegressor_prior function in gpr.py, which is located in the scikit library. Default=None.")
+argp.add_argument("-pc", "--principal-component", type=int, default=None, help="Use this option to specify that you would like to interpolate the prinripal components rather than the steps, and specifed the number of PCs you would like to retain. Default=None.")
+argp.add_argument("-s", "--save-pickle", action="store_true", help="Save the GP model as a pickle. Default is off.")
+argp.add_argument("-pl", "--make-plots", action="store_true", help="Makes and saves plots during this script. Default is off.")
+argp.add_argument("-e", "--expand-matrix", action="store_true", help="Use this option to expand the input/output matrices, so that steps/principal components retain some correlation information. This will expand the matrices by the length of the resampling, or by the number specified in PC if args.principal_component is defined. Note that this will increase training time by ~x^3 and may cause memory issues. Default=None.")
+argp.add_argument("-T", "--test-MT", type=int, default=None, help="Cuts the dataset to make a smaller grid centered around a testing track. Providing an integer gives the number nearest tracks you wish to keep in the training set. Default='None'. Default testing track using this option is 10 Mbh, 15 M2, 2 P, 0.02 Z. Default path for test_MT resamplings is 'data/test_MT/resampled/<resamp>/'.")
+argp.add_argument("-pr", "--prior", type=str, default=None, help="This will call a different Gaussian Process Regressor that imposes a prior on the hyperparameters, used when there is intuition for what the scale length/amplitude in the kernel should approximately be. One can add additional priors in the GaussianProcessRegressor_prior function in gpr.py, which is located in the scikit library. Default=None.")
 args = argp.parse_args()
+
 
 
 
@@ -76,7 +80,7 @@ inputs=[]
 outputs=[]
 for file in os.listdir(path):
     x = np.load(path + file)
-    inputs.append((np.float(x['M2_init']),np.float(x['Mbh_init']),np.float(x['P_init']),np.float(x['Z_init'])))
+    inputs.append((np.float(x['M2_init']),np.float(x['Mbh_init']),np.log10(np.float(x['P_init'])),np.log10(np.float(x['Z_init']))))
     outputs.append(x['x_resamp'][:,param_idx])
 
 
@@ -87,7 +91,7 @@ resamp_len = outputs.shape[1]
 print '\nThe full grid contains %i tracks' % len(inputs)
 
 # store inputs as a dataframe
-inputs_df = pd.DataFrame({"M2_init": inputs[:,0], "Mbh_init": inputs[:,1], "P_init": inputs[:,2], "Z_init": np.log10(inputs[:,3])})  # NOTE: metallicities are in log...maybe should do same for periods?
+inputs_df = pd.DataFrame({"M2_init": inputs[:,0], "Mbh_init": inputs[:,1], "P_init": inputs[:,2], "Z_init": inputs[:,3]})
 full_inputs_df = inputs_df.copy()   # store the full input grid for renormalization purposes
 
 # if cut_set is specified, we randomly reduce the set to args.cut_set of the total
@@ -95,7 +99,7 @@ if args.cut_set:
     reduced = np.where(np.random.random(size=len(inputs)) < args.cut_set)
     inputs = inputs[reduced]
     outputs = outputs[reduced]
-    inputs_df = pd.DataFrame({"M2_init": inputs[:,0], "Mbh_init": inputs[:,1], "P_init": inputs[:,2], "Z_init": np.log10(inputs[:,3])})
+    inputs_df = pd.DataFrame({"M2_init": inputs[:,0], "Mbh_init": inputs[:,1], "P_init": inputs[:,2], "Z_init": inputs[:,3]})
     print 'The cut grid contains %i tracks' % len(inputs)
     
 
@@ -103,7 +107,7 @@ if args.cut_set:
 print '\nThe bounds of the grid for interpolation are:'
 print '   M2_init: %f - %f' % (inputs_df["M2_init"].min(), inputs_df["M2_init"].max())
 print '   Mbh_init: %f - %f' % (inputs_df["Mbh_init"].min(), inputs_df["Mbh_init"].max())
-print '   P_init: %f - %f' % (inputs_df["P_init"].min(), inputs_df["P_init"].max())
+print '   P_init: %f - %f' % (10**inputs_df["P_init"].min(), 10**inputs_df["P_init"].max())
 print '   Z_init: %f - %f' % (10**(inputs_df["Z_init"]).min(), 10**(inputs_df["Z_init"]).max())
 
 
@@ -115,7 +119,7 @@ if args.make_plots:
     ax.set_ylabel('$Companion\ Mass\ (M_{\odot})$', rotation=0, labelpad=20, size=12)
     ax.set_xlabel('$Log\ Period\ (s)$', rotation=0, labelpad=20, size=12)
 
-    pts = ax.scatter(np.log10(inputs_df['P_init']), inputs_df['M2_init'], inputs_df['Mbh_init'], zdir='z', s=5, cmap='viridis', c=inputs_df['Z_init'], label='simulated tracks')
+    pts = ax.scatter(inputs_df['P_init'], inputs_df['M2_init'], inputs_df['Mbh_init'], zdir='z', s=5, cmap='viridis', c=inputs_df['Z_init'], label='simulated tracks')
     fig.colorbar(pts)
     plt.tight_layout()
     plt.legend()
@@ -138,8 +142,24 @@ def denormalize(df, norm_df):
         denormed[key] = (df[key] * (norm_df[key].max()-norm_df[key].min()) + norm_df[key].min())
     return denormed
 
-# normalize 
+# define function to "center" the output values by subtracting out the mean value
+def center(y):
+    means=[]
+    y_cen = np.empty(np.shape(y))
+    for i in xrange(len(y.T)):   # need to iterate over all the steps
+        means.append(y[:,i].mean())
+        y_cen[:,i] = y[:,i]-y[:,i].mean()
+    return y_cen, means
+
+def uncenter(y_cen, means):
+    y = np.empty(np.shape(y_cen))
+    for i in xrange(len(y_cen.T)):
+        y[:,i] = y_cen[:,i]+means[i]
+    return y
+
+# normalize & center
 inputs = normalize(inputs_df, full_inputs_df)
+outputs, means = center(outputs)
 
 
 # split dataset into training and testing sets
@@ -150,25 +170,26 @@ else:
 
 
 
-## If test_MT is specified, read in this track and cut the inputs tracks as specified
+## If test_MT is specified, read in this track and cut the inputs tracks as specified #FIXME this won't work for >1 test_MT
 if args.test_MT:
     testMT_path = basepath + '/data/test_MT/resampled/' + args.resamp + '/'
     testMT_inputs=[]
     testMT_outputs=[]
     for file in os.listdir(testMT_path):   # should only be 1 file in this directory, but can have more
         x = np.load(testMT_path + file)
-        testMT_inputs.append((np.float(x['M2_init']),np.float(x['Mbh_init']),np.float(x['P_init']),0.02))   # for some reason no Z recorded...
+        testMT_inputs.append((np.float(x['M2_init']),np.float(x['Mbh_init']),np.log10(np.float(x['P_init'])),np.log10(0.02)))   # for some reason no Z recorded...
         testMT_outputs.append(x['x_resamp'][:,param_idx])
 
     # reshape as arrays
     testMT_inputs = np.reshape(testMT_inputs,[len(testMT_inputs),4])
     testMT_outputs = np.asarray(testMT_outputs)
 
-    # store testMT inputs as a dataframe
-    testMT_inputs_df = pd.DataFrame({"M2_init": testMT_inputs[:,0], "Mbh_init": testMT_inputs[:,1], "P_init": testMT_inputs[:,2], "Z_init": np.log10(testMT_inputs[:,3])})
+    # store test_MT inputs as a dataframe
+    testMT_inputs_df = pd.DataFrame({"M2_init": testMT_inputs[:,0], "Mbh_init": testMT_inputs[:,1], "P_init": testMT_inputs[:,2], "Z_init": testMT_inputs[:,3]})
 
-    # normalize testMT inputs
+    # normalize test_MT inputs & center from testMT_outputs
     testMT_inputs = normalize(testMT_inputs_df, full_inputs_df)
+    testMT_outputs = testMT_outputs - means
 
     # choose args.test_MT tracks closest to the testing track as the training data
     norm_vecs=[]
@@ -179,11 +200,11 @@ if args.test_MT:
     # only use the closest input and output points
     inputs_df = inputs_df.iloc[sorted_idxs[0:args.test_MT]]
     outputs = outputs[sorted_idxs[0:args.test_MT]]
-    print '\nThe cut grid contains:'
-    print 'M2_init: %f - %f' % (inputs_df["M2_init"].min(), inputs_df["M2_init"].max())
-    print 'Mbh_init: %f - %f' % (inputs_df["Mbh_init"].min(), inputs_df["Mbh_init"].max())
-    print 'P_init: %f - %f' % (inputs_df["P_init"].min(), inputs_df["P_init"].max())
-    print 'Z_init: %f - %f' % (10**inputs_df["Z_init"].min(), 10**inputs_df["Z_init"].max())
+    print '\nThe cut grid surrounding the testing track contains:'
+    print '   M2_init: %f - %f' % (inputs_df["M2_init"].min(), inputs_df["M2_init"].max())
+    print '   Mbh_init: %f - %f' % (inputs_df["Mbh_init"].min(), inputs_df["Mbh_init"].max())
+    print '   P_init: %f - %f' % (10**inputs_df["P_init"].min(), 10**inputs_df["P_init"].max())
+    print '   Z_init: %f - %f' % (10**inputs_df["Z_init"].min(), 10**inputs_df["Z_init"].max())
 
     # re-normalize the cut array so that its values range from 0-1
     testMT_inputs = normalize(testMT_inputs_df, inputs_df)
@@ -207,25 +228,7 @@ else:
 
 
 
-### Principal Component Section ###
-
-# functions for principal component analysis
-def center(y):
-    means=[]
-    y_cen = np.empty(np.shape(y))
-    for i in xrange(len(y.T)):
-        means.append(y[:,i].mean())
-        y_cen[:,i] = y[:,i]-y[:,i].mean()
-    return y_cen, means
-
-def uncenter(y_cen, means):
-    for i in xrange(len(y_cen.T)):
-        y[:,i] = y_cen[:,i]+means[i]
-    return y
-
-def PCA_to_vals(y):
-    return pca.inverse_transform(y)
-
+### PRINCIPAL COMPONENET SECTION ###
 
 # convert y data using PCs if args.principal-components is specified
 if args.principal_component:
@@ -244,16 +247,12 @@ if args.principal_component:
     else: 
         X_train = X_train_orig; X_test = X_test_orig
         y_train = pca.transform(y_train_orig)
-        y_test = pca.transform(y_test_orig)
+        y_test = pca.transform(y_test_orig)   # hold onto these in case we want to look at them
         
 
 
 
-### Interpolation Section ###
-
-# specify number of cores to run on
-num_cores = multiprocessing.cpu_count()
-pool = multiprocessing.Pool(num_cores)
+### INTERPOLATION SECTION ###
 
 # define interpolation functions
 # notation for parallelizing: data[0]: X_train, data[1]: y_train, data[2]: X_test
@@ -274,18 +273,19 @@ def GPR_scikit(data):
 
     # choose between regular and prior-included GP   FIXME: might be worth writing our own normalization function...
     if args.prior:
-        gp = GPR_prior(kernel=kernel, n_restarts_optimizer=9, normalize_y = True)   # FIXME maybe have the prior as an argument?
+        gp = GPR_prior(kernel=kernel, n_restarts_optimizer=9, normalize_y=False)
+        gp.fit_prior(X, y, prior=args.prior)
     else: 
-        gp = GPR(kernel=kernel, n_restarts_optimizer=9, normalize_y = True)
+        gp = GPR(kernel=kernel, n_restarts_optimizer=9, normalize_y=False)
+        gp.fit(X, y)
 
-    gp.fit(X, y)
+    params = gp.kernel_.get_params()
 
     X_pred = np.atleast_2d(data[2])
-
     y_pred, sigma = gp.predict(X_pred, return_std=True)
     y_pred = np.reshape(y_pred,len(y_pred))
 
-    return y_pred, sigma
+    return y_pred, sigma, params
 
 
 def linear_interp(data):
@@ -293,67 +293,82 @@ def linear_interp(data):
     return value
 
 
-
-def GPR_scikit_old(X_train, y_train, X_test):   #FIXME get rid of these functions, just have everything consistent with the multiproessing setup
-    #FIXME something has to be jacked up with this function...returns same values for every step...
-    X = np.atleast_2d(X_train)
-    y = np.atleast_2d(y_train).T
-    X_pred = np.atleast_2d(X_test)
-
-    # get min and max of outputs for the constant kernel's bounds #FIXME is this necessary?
-    c_min = np.abs(y_train).min()
-    c_max = np.abs(y_train).max()
-
-    kernel = C(1e0,(1e-3,1e3))*RBF(length_scale=[1e0,1e0,1e0,1e0,1e0],length_scale_bounds=[(1e-2,1e2),(1e-2,1e2),(1e-2,1e2),(1e-2,1e2),(1e-2,1e2)])
-
-    yerr = 1e-6
-    gp = GPR(kernel=kernel, n_restarts_optimizer=9, normalize_y = True)
-    gp.fit(X, y)
-    params = gp.kernel_.get_params()
-
-    y_pred, sigma = gp.predict(X_pred, return_std=True)
-    y_pred = np.reshape(y_pred,len(y_pred))
-
-    return y_pred, sigma, params
-
-def linear_interp_old(X_train, y_train, X_test):
-    value = sp.interpolate.griddata(X_train, y_train, X_test, method='linear', fill_value=0.0)
-    return value
+# specify number of cores to run on
+if args.num_cores:
+    num_cores = args.num_cores
+else:
+    num_cores = multiprocessing.cpu_count()
+pool = multiprocessing.Pool(num_cores)
 
 
 # do the GP inteprolation
 start_time = time.time()   # start the clock
-GP_pred, sigma, params = GPR_scikit(X_train, y_train, X_test)
+
+if y_train.ndim == 1:
+    y_train = np.expand_dims(y_train,1)   # adds dimension if array is 1-dimensional
+temp=[]
+for item in y_train.T:
+    combined = (X_train, item, X_test)
+    temp.append(combined) # now, temp is holding all the information needed for interpolation function
+
+results = pool.map(GPR_scikit, temp) # this is the workhorse line
+
+GP_pred = list(results[i][0] for i in xrange(len(results)))
+sigma = list(results[i][1] for i in xrange(len(results)))
+params = list(results[i][2] for i in xrange(len(results)))
+
 elapsed = time.time() - start_time   # See how long it took
 print '\nDone with GP interpolation for %s...it only took %f seconds!' % (args.parameter,elapsed)
 
 
+
 # do the linear inteprolation
 start_time = time.time()   # start the clock
-lin_pred = linear_interp(X_train, y_train, X_test)
+
+if y_train.ndim == 1:
+    y_train = np.expand_dims(y_train,1)   # adds dimension if array is 1-dimensional
+temp=[]
+for item in y_train.T:
+    combined = (X_train, item, X_test)
+    temp.append(combined) # now, temp is holding all the information needed for interpolation function
+
+results = pool.map(linear_interp, temp) # this is the workhorse line
+
+lin_pred = list(results[i] for i in xrange(len(results)))
+
 elapsed = time.time() - start_time   # See how long it took
 print 'Done with linear interpolation for %s...it only took %f seconds!\n' % (args.parameter,elapsed)
 
 
+
+### STRUCTURE OUTPUT AND SAVE ###
+
+# reshape outputs to be in form (tracks, steps/PCs)
+if args.principal_component:
+    GP_pred_PC = np.reshape(np.transpose(GP_pred), (len(y_test_orig),args.principal_component))
+    sigma_PC = np.reshape(np.transpose(sigma), (len(y_test_orig),args.principal_component))
+    lin_pred_PC = np.reshape(np.transpose(lin_pred), (len(y_test_orig),args.principal_component))
+else:
+    GP_pred = np.reshape(np.transpose(GP_pred), (y_test_orig.shape[0],y_test_orig.shape[1]))
+    sigma = np.reshape(np.transpose(sigma), (y_test_orig.shape[0],y_test_orig.shape[1]))
+    lin_pred = np.reshape(np.transpose(lin_pred), (y_test_orig.shape[0],y_test_orig.shape[1]))
+
 # if PC was specified, return data to original basis
 if args.principal_component:
-    GP_pred_PC = np.reshape(GP_pred, (len(y_test_orig),args.principal_component))
-    sigma_PC = np.reshape(sigma, (len(y_test_orig),args.principal_component))
-    lin_pred_PC = np.reshape(lin_pred, (len(y_test_orig),args.principal_component))
-    GP_pred = PCA_to_vals(GP_pred_PC)
-    sigma = PCA_to_vals(sigma_PC)
-    lin_pred = PCA_to_vals(lin_pred_PC)
-
-
-# reshape interpolations as (tracks,steps) for convenience
-GP_pred = np.reshape(GP_pred, (y_test_orig.shape[0],y_test_orig.shape[1]), order='C')
-sigma = np.reshape(sigma, (y_test_orig.shape[0],y_test_orig.shape[1]), order='C')
-lin_pred = np.reshape(lin_pred, (y_test_orig.shape[0],y_test_orig.shape[1]), order='C')
+    GP_pred = pca.inverse_transform(GP_pred_PC)
+    sigma = pca.inverse_transform(sigma_PC)   # FIXME this probably isn't giving the correct error
+    lin_pred = pca.inverse_transform(lin_pred_PC)
 
 
 # denormalize the input testing and training sets
 X_test_orig = denormalize(X_test_orig, inputs_df)
 X_train_orig = denormalize(X_train_orig, inputs_df)
+
+# uncenter output values
+GP_pred = uncenter(GP_pred, means)
+lin_pred = uncenter(lin_pred, means)
+y_test_orig = uncenter(y_test_orig, means)
+y_train_orig = uncenter(y_train_orig, means)
 
 
 # save pickle

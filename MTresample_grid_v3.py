@@ -10,7 +10,7 @@ import os
 # The list_x can have any number of column names found in the npy files.
 list_x = ['star_1_mass' , 'log_Teff', 'log_L', 'log_R', 'period_days', 'lg_mstar_dot_1', 'age']
 norm = 2.       # FLOAT: choose between L^1, L^2, ... L^N normalization
-Nresample = 20
+Nresample = 1000
 #------------------------
 
 list_x.sort() # put in alphabetical order to prevent multiple of the same resamplings being saved
