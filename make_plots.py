@@ -96,9 +96,9 @@ for idx, p in enumerate(params):
     # do plotting
     param = pickles[p]
     axs[idx].plot(np.linspace(0,steps,steps), param['y_test'][t,:], 'k', linewidth=1, alpha=0.5, label='actual evolution')
-    axs[idx].plot(np.linspace(0,steps,steps), param['linear'][t,:], 'g.', linewidth=3, alpha=0.5, label='linear interpolated evolution')
-    axs[idx].plot(np.linspace(0,steps,steps), param['GP'][t,:], 'b.', linewidth=3, alpha=0.5, label='GP interpolated evolution')
-    axs[idx].fill_between(np.linspace(0,steps,steps), param['GP'][t,:]-param['error'][t,:], param['GP'][t,:]+param['error'][t,:], alpha=0.05, label='GP error')
+    axs[idx].plot(np.linspace(0,steps,steps), param['linear'][t,:], 'g', linewidth=0.5, alpha=0.5, label='linear interpolated evolution')
+    axs[idx].plot(np.linspace(0,steps,steps), param['GP'][t,:], 'b', linewidth=0.5, alpha=0.5, label='GP interpolated evolution')
+    #axs[idx].fill_between(np.linspace(0,steps,steps), param['GP'][t,:]-param['error'][t,:], param['GP'][t,:]+param['error'][t,:], alpha=0.05, label='GP error')
 plt.legend()
 fname = pltdir + 'test_evolution.png'
 plt.tight_layout()
