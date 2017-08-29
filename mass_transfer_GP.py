@@ -5,6 +5,7 @@ import numpy as np
 import scipy as sp
 import pandas as pd
 from scipy.interpolate import griddata
+from scipy.stats import norm
 import argparse
 import time
 import os
@@ -43,7 +44,7 @@ argp.add_argument("-p", "--parameter", type=str, help="Parameter you wish to int
 argp.add_argument("-t", "--test-set", type=float, default=0.2, help="Fraction of the total (or cut set if cut-set is specified) set that is held out for testing (i.e., the GP will be trained on the N*(1-t) datapoints). Default = 0.2.")
 argp.add_argument("-c", "--cut-set", type=float, default=None, help="Randomly reduces the number of tracks by N*(c) so the input matrix isn't too crazy big. Default=None.")
 argp.add_argument("-rs", "--random-seed", type=int, help="Use this for reproducible output.")
-argp.add_argument("-nc", "--num-cores", type=int, default=None, help="Specify number of cores to use. If not specifed, will parallelize over all available cores.")
+argp.add_argument("-nc", "--num-cores", type=int, default=None, help="Specify number of cores to use. If not specifed, will parallelize over all available cores. If 1 core is specified, will circumvent multiprocessing for debugging purposes.")
 argp.add_argument("-f", "--run-tag", help="Use this as the stem for all file output.")
 argp.add_argument("-pc", "--principal-component", type=int, default=None, help="Use this option to specify that you would like to interpolate the prinripal components rather than the steps, and specifed the number of PCs you would like to retain. Default=None.")
 argp.add_argument("-s", "--save-pickle", action="store_true", help="Save the GP model as a pickle. Default is off.")
@@ -250,31 +251,30 @@ if args.principal_component:
         y_test = pca.transform(y_test_orig)   # hold onto these in case we want to look at them
         
 
-
-
 ### INTERPOLATION SECTION ###
 
 # define interpolation functions
 # notation for parallelizing: data[0]: X_train, data[1]: y_train, data[2]: X_test
+
 def GPR_scikit(data):
     X = np.atleast_2d(data[0])
     y = np.atleast_2d(data[1]).T # need to transpose to make dimensions match since y is 1D
 
-    # get min and max of outputs for the constant kernel's bounds
-    c_min = np.abs(data[1]).min()   #FIXME if y is normalized then these will just be [0,1]...
-    c_max = np.abs(data[1]).max()
-
-    if args.expand_matrix:
-        kernel = C(1e0,(1e-3,1e3))*RBF(length_scale=[1e0,1e0,1e0,1e0,1e0],length_scale_bounds=[(1e-2,1e2),(1e-2,1e2),(1e-2,1e2),(1e-2,1e2),(1e-2,1e2)])
-    else:
-        kernel = C(1e0,(1e-3,1e3))*RBF(length_scale=[1e0,1e0,1e0,1e0],length_scale_bounds=[(1e-2,1e2),(1e-2,1e2),(1e-2,1e2),(1e-2,1e2)]) 
+    # NOTE: kernel uses log of given hyperparameters, such that theta=np.log(length_scale)
+    cs=[1e-1]
+    csb=[(1e-3,1e0)]
+    ls=[1e-2]*np.shape(inputs_df)[1]
+    lsb=[(1e-5,1e-0)]*np.shape(inputs_df)[1]
+    kernel = C(cs,csb) * RBF(length_scale=ls, length_scale_bounds=lsb)
+    # specify the parameters for the prior (in the case of log_normal, mean & scale)
+    prior_params = [(-1,0.5)]+[(-2,0.5)]*np.shape(inputs_df)[1]
 
     yerr = 1e-6
 
-    # choose between regular and prior-included GP   FIXME: might be worth writing our own normalization function...
+    # choose between regular and prior-included GP
     if args.prior:
-        gp = GPR_prior(kernel=kernel, n_restarts_optimizer=9, normalize_y=False)
-        gp.fit_prior(X, y, prior=args.prior)
+        gp = GPR_prior(kernel=kernel, n_restarts_optimizer=9, normalize_y=False, prior=args.prior, prior_params=prior_params)
+        gp.fit_prior(X, y)
     else: 
         gp = GPR(kernel=kernel, n_restarts_optimizer=9, normalize_y=False)
         gp.fit(X, y)
@@ -311,7 +311,15 @@ for item in y_train.T:
     combined = (X_train, item, X_test)
     temp.append(combined) # now, temp is holding all the information needed for interpolation function
 
-results = pool.map(GPR_scikit, temp) # this is the workhorse line
+if args.prior:
+    print '\nUsing %s prior on the likelihood calculations of hyperparameters' % args.prior
+
+if args.num_cores==1:
+    results=[]
+    for i in temp:
+        results.append(GPR_scikit(i))
+else:
+    results = pool.map(GPR_scikit, temp) # this is the workhorse line
 
 GP_pred = list(results[i][0] for i in xrange(len(results)))
 sigma = list(results[i][1] for i in xrange(len(results)))
@@ -332,7 +340,12 @@ for item in y_train.T:
     combined = (X_train, item, X_test)
     temp.append(combined) # now, temp is holding all the information needed for interpolation function
 
-results = pool.map(linear_interp, temp) # this is the workhorse line
+if args.num_cores==1:
+    results=[]
+    for i in temp:
+        results.append(linear_interp(i))
+else:
+    results = pool.map(linear_interp, temp)
 
 lin_pred = list(results[i] for i in xrange(len(results)))
 
@@ -369,6 +382,8 @@ GP_pred = uncenter(GP_pred, means)
 lin_pred = uncenter(lin_pred, means)
 y_test_orig = uncenter(y_test_orig, means)
 y_train_orig = uncenter(y_train_orig, means)
+
+print params
 
 
 # save pickle
